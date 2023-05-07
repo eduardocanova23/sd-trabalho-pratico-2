@@ -4,6 +4,7 @@
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
+#include <chrono>
 
 int totalSum = 0;
 Spinlock lock;
@@ -70,6 +71,7 @@ int main(int argc, char* argv[]){
     }
     
     // threads 
+    auto start = std::chrono::high_resolution_clock::now();
     pthread_t* thread = new pthread_t[K];
     ThreadParams* params = new ThreadParams[K];
 
@@ -98,6 +100,9 @@ int main(int argc, char* argv[]){
     for (int i = 0; i < K; i++){
         pthread_join(thread[i], NULL);
     }
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    std::cout << "Duration: " << duration << " microseconds" << std::endl;
 
     delete[] numbers;
     delete[] params;
