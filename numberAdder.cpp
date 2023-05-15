@@ -26,28 +26,24 @@ void setRandomArray(char* arr, int size) {
 
 void* adder(void* arg){
     ThreadParams* params = static_cast<ThreadParams*>(arg); // setting params type as ThreadParams
-    char* localNumbers = new char[params->end - params->start + 1]; // allocating memory for localNumbers
-    std::copy(params->numbers + params->start, params->numbers + params->end + 1, localNumbers); 
     
     int localTotal = 0;
-    int size = params->end - params->start + 1; // size of the local array
 
     /*
         We increase i in 2 every loop.
         In the last loop, we do arr[i] + 0. 
     */
-    for(int i = 0; i < size; i+=2){
-        int a = static_cast<int>(localNumbers[i]);
+    for(int i = params->start; i < params->end +1; i+=2){
+        int a = static_cast<int>(params->numbers[i]);
         int b = 0;
-        if (i != size - 1){
-            b += static_cast<int>(localNumbers[i+1]); 
+        if (i != params->end){
+            b += static_cast<int>(params->numbers[i+1]); 
         }
         localTotal += a + b;
     }
     lock.acquire();
     totalSum += localTotal;
     lock.release();
-    delete[] localNumbers;
     pthread_exit(NULL);
 }
 
@@ -102,7 +98,7 @@ int main(int argc, char* argv[]){
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    std::cout << "Duration: " << duration << " microseconds" << std::endl;
+    std::cout << duration << std::endl;
 
     delete[] numbers;
     delete[] params;
@@ -112,7 +108,7 @@ int main(int argc, char* argv[]){
         std::cerr << "Error: different results" << std::endl;
     }
 
-    std::cout << "The total sum is: " << totalSum << "\n";
+    // std::cout << "The total sum is: " << totalSum << "\n";
 
     return 0;
 }
