@@ -3,15 +3,19 @@
 #include <random>
 #include <thread>
 #include <time.h>
-
+#include "gnuplot-iostream.h"
 using namespace std;
 
+vector<int> memory_tracker; // vector to store all the times memory was used
+vector<double> timestamps;
 vector<int> memory_vec;
 sem_t empty_positions;
 sem_t full_positions;
 int to_process = 100000;
+int to_produce = 100000;
 int memory_size;
 sem_t mutex_memory_access;
+int num_full_positions;
 
 int isPrime(int number){
     bool isPrime = true;
@@ -29,10 +33,8 @@ void Producer()
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> distrib(1, 10000000);
-    
-     
-
-    while(to_process > 0)
+  
+    while(to_produce > 0)
     {
         int random_int = distrib(gen);  
         sem_wait(&empty_positions);
@@ -49,6 +51,16 @@ void Producer()
         memory_vec[index] = random_int;
         }
         
+        num_full_positions++;
+        memory_tracker.push_back(num_full_positions);
+
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+        double elapsed = now.tv_sec + now.tv_nsec / 1e9;
+        timestamps.push_back(elapsed);
+
+        to_produce--;
+
         sem_post(&mutex_memory_access);
         sem_post(&full_positions);
     }
@@ -75,6 +87,15 @@ void Consumer()
             }    
 
             to_process--;
+
+            num_full_positions--;
+            memory_tracker.push_back(num_full_positions);
+
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+            double elapsed = now.tv_sec + now.tv_nsec / 1e9;
+            timestamps.push_back(elapsed);
+
         sem_post(&mutex_memory_access);
         sem_post(&empty_positions);
 
@@ -85,7 +106,7 @@ void Consumer()
             printf("%d is NOT prime\n", collected_number);
         }
     }
-     
+
     sem_post(&full_positions);
     sem_post(&empty_positions);
 }
@@ -121,5 +142,27 @@ int main(int argc, char* argv[])
 
     std::cout << "Execution time: " << duration << " seconds" << std::endl;
 
+    Gnuplot gp;
+
+    // Set terminal and output file
+    gp << "set terminal png size 800,600\n";
+    gp << "set output 'myplot.png'\n";
+
+    gp << "set title 'My Plot'\n";
+    gp << "set xlabel 'X Axis'\n";
+    gp << "set ylabel 'Amount of full spaces in memory'\n";
+
+    // Plot data
+    gp << "plot '-' with lines title 'My Data'\n";
+    gp.send1d(std::make_tuple(timestamps, memory_tracker));
+
+    // Wait for user to close plot window
+    std::cout << "Press enter to exit." << std::endl;
+    std::cin.get();
+
     return 0;
 }
+
+// sudo apt-get install libgnuplot-iostream-dev
+// g++ -pthread ProdCons.cpp -o pc -L/usr/lib -lboost_filesystem -lboost_system -lboost_iostreams
+// feh myplot.png
