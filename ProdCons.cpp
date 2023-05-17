@@ -3,18 +3,20 @@
 #include <random>
 #include <thread>
 #include <time.h>
+#include <ctime>
+#include <chrono>
 #include "gnuplot-iostream.h"
 using namespace std;
 
 vector<int> memory_tracker; // vector to store all the times memory was used
 vector<double> timestamps;
 vector<int> memory_vec;
+sem_t mutex_memory_access;
 sem_t empty_positions;
 sem_t full_positions;
 int to_process = 100000;
 int to_produce = 100000;
 int memory_size;
-sem_t mutex_memory_access;
 int num_full_positions;
 
 int isPrime(int number){
@@ -54,17 +56,14 @@ void Producer()
         num_full_positions++;
         memory_tracker.push_back(num_full_positions);
 
-        struct timespec now;
-        clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-        double elapsed = now.tv_sec + now.tv_nsec / 1e9;
-        timestamps.push_back(elapsed);
+        clock_t start = clock();
+        timestamps.push_back(start);
 
         to_produce--;
 
         sem_post(&mutex_memory_access);
         sem_post(&full_positions);
     }
-    sem_post(&full_positions);
     sem_post(&empty_positions);
 }
 
@@ -91,10 +90,8 @@ void Consumer()
             num_full_positions--;
             memory_tracker.push_back(num_full_positions);
 
-            struct timespec now;
-            clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-            double elapsed = now.tv_sec + now.tv_nsec / 1e9;
-            timestamps.push_back(elapsed);
+            clock_t start = clock();
+            timestamps.push_back(start);
 
         sem_post(&mutex_memory_access);
         sem_post(&empty_positions);
@@ -108,7 +105,6 @@ void Consumer()
     }
 
     sem_post(&full_positions);
-    sem_post(&empty_positions);
 }
 
 int main(int argc, char* argv[])
@@ -124,8 +120,7 @@ int main(int argc, char* argv[])
     
     vector<thread> threads;
 
-    struct timespec start, end;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    auto start = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < amount_producers; i++) {
         threads.push_back(thread(Producer));
@@ -137,24 +132,37 @@ int main(int argc, char* argv[])
         th.join();
     }
 
-    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    double duration = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1000000000.0;
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    std::cout << "Duration: " << duration << " microseconds" << std::endl;
 
-    std::cout << "Execution time: " << duration << " seconds" << std::endl;
+    std::vector<int> beginning_mem_tracker;
+    beginning_mem_tracker.resize(400);
+
+    std::vector<int> beginning_timestamps;
+    beginning_timestamps.resize(400);
+
+    // Copy the first 500 elements of the source vector to the destination vector
+    beginning_mem_tracker.assign(memory_tracker.begin(), memory_tracker.begin() + 400);
+
+    // Copy the first 500 elements of the source vector to the destination vector
+    beginning_timestamps.assign(timestamps.begin(), timestamps.begin() + 400);
+
+    
 
     Gnuplot gp;
 
     // Set terminal and output file
-    gp << "set terminal png size 800,600\n";
+    gp << "set terminal png size 1000,750\n";
     gp << "set output 'myplot.png'\n";
 
     gp << "set title 'My Plot'\n";
-    gp << "set xlabel 'X Axis'\n";
+    gp << "set xlabel 'Time elapsed'\n";
     gp << "set ylabel 'Amount of full spaces in memory'\n";
 
     // Plot data
     gp << "plot '-' with lines title 'My Data'\n";
-    gp.send1d(std::make_tuple(timestamps, memory_tracker));
+    gp.send1d(std::make_tuple(beginning_timestamps, beginning_mem_tracker));
 
     // Wait for user to close plot window
     std::cout << "Press enter to exit." << std::endl;
